@@ -91,11 +91,34 @@ def main(_argv):
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
     frame_num = 0
+    v_high = 250
+    h_high = 255
+    s_high = 255
+
+    v_low = 0
+    h_low = 0
+    s_low = 10
+    count_flux_up = 0
+    count_flux_down = 0
+    objects_appeared_up = []
+    objects_appeared_down = []
     # while video is running
     while True:
         return_value, frame = vid.read()
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            # mask = cv2.inRange(frame, (h_low, s_low, v_low), (h_high, s_high, v_high))
+            # mask_out_low = cv2.inRange(frame, (0, 0, 0), (h_low, s_low, v_low))
+            # mask_out_high = cv2.inRange(frame, (h_high, s_high, v_high), (255, 255, 255))
+            # frame = cv2.bitwise_and(frame, frame, mask=mask)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_HSV2RGB)
+
+            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # frame = cv2.equalizeHist(frame)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+
             image = Image.fromarray(frame)
         else:
             print('Video has ended or failed, try a different video format!')
@@ -158,6 +181,7 @@ def main(_argv):
 
         # by default allow all classes in .names file
         allowed_classes = list(class_names.values())
+        allowed_classes = ["car", "motorbike", "bus", "truck"]
         
         # custom allowed classes (uncomment line below to customize tracker for only people)
         #allowed_classes = ['person']
@@ -175,7 +199,7 @@ def main(_argv):
         names = np.array(names)
         count = len(names)
         if FLAGS.count:
-            cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
+            cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 135), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
             print("Objects being tracked: {}".format(count))
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
@@ -198,8 +222,10 @@ def main(_argv):
 
         # Call the tracker
         tracker.predict()
+        print("tracks before", len(tracker.tracks))
+        before_tracker_ids = [track.track_id for track in tracker.tracks]
         tracker.update(detections)
-
+        print("tracks after", len(tracker.tracks))
         # update tracks
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
@@ -214,7 +240,28 @@ def main(_argv):
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
             cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
 
+        # here we should initiate the tracker by:
+            if track.track_id in before_tracker_ids:
+                # is an existing objects so we should check if passed the line or not
+                # for that we have to check in which group it is
+                if track.track_id in objects_appeared_up:
+                    # appeared up the line and we expect it to go below
+                    # check if it went below, in which case we drop it from the list and add to the counter
+                    pass
+                elif track.track_id in objects_appeared_down:
+                    # appeared down the line and we expect it to go up
+                    # check if it went up, in which case we drop it from the list and add to the counter
+                    pass
+                else:
+                    # we may end up here for objects that already crossed the line
+                    # we should do nothing
+                    pass
+            else:
+                # is a new object (or maybe a object that was missed before) and we need to add this id to the respective
+                # list for up_objects or down_objects with respecto to the line
+                pass
         # if enable info flag then print details about each track
+
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
@@ -225,6 +272,7 @@ def main(_argv):
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
         if not FLAGS.dont_show:
+            cv2.resize(result, (640, 400))
             cv2.imshow("Output Video", result)
         
         # if output flag is set, save video file
